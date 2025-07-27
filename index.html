@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>وجه كرتوني 3D يتتبع الوجه</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- مكتبة Three.js لعرض 3D -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.151.3/build/three.min.js"></script>
+  <!-- مكتبة MediaPipe FaceMesh -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+</head>
+<body>
+  <h1>وجه كرتوني 3D يتتبع وجهك</h1>
+
+  <!-- عنصر الفيديو لفتح الكاميرا -->
+  <video id="input_video" style="display:none;"></video>
+
+  <!-- عنصر كانفاس لعرض 3D -->
+  <canvas id="output_canvas"></canvas>
+
+  <script src="script.js"></script>
+</body>
+</html>
